@@ -4,107 +4,37 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin - Live Results</title>
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <!-- Pusher JS SDK -->
     <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
-    <!-- Axios -->
     <script src="https://cdn.jsdelivr.net/npm/axios@1.6.2/dist/axios.min.js"></script>
-    <!-- Chart Helper -->
-    <script src="/static/chart.js"></script>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: #fff;
-            margin: 0;
-            padding: 20px;
-            min-height: 100vh;
-        }
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 10px;
-        }
-        .subtitle {
-            text-align: center;
-            color: #8892b0;
-            margin-bottom: 30px;
-        }
-        .chart-container {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 20px;
-            backdrop-filter: blur(10px);
-        }
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin-top: 20px;
-        }
-        .stat-card {
-            background: rgba(255, 255, 255, 0.08);
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-        }
-        .stat-value {
-            font-size: 2em;
-            font-weight: bold;
-            color: #64ffda;
-        }
-        .stat-label {
-            color: #8892b0;
-            font-size: 0.9em;
-        }
-        .status {
-            text-align: center;
-            margin-top: 20px;
-        }
-        .live-indicator {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            color: #64ffda;
-            font-weight: 500;
-        }
-        .pulse {
-            width: 8px;
-            height: 8px;
-            background: #64ffda;
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(1.2); }
-        }
-        .controls {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .btn {
-            background: #64ffda;
-            color: #1a1a2e;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 600;
-            margin: 0 5px;
-        }
-        .btn:hover {
-            background: #4fd1c5;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+               background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; 
+               margin: 0; padding: 20px; min-height: 100vh; }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 10px; }
+        .subtitle { text-align: center; color: #8892b0; margin-bottom: 30px; }
+        .chart-container { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 20px; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); 
+                 gap: 15px; margin-top: 20px; }
+        .stat-card { background: rgba(255,255,255,0.08); padding: 15px; border-radius: 8px; text-align: center; }
+        .stat-value { font-size: 2em; font-weight: bold; color: #64ffda; }
+        .stat-label { color: #8892b0; font-size: 0.9em; }
+        .status { text-align: center; margin-top: 20px; }
+        .live-indicator { display: inline-flex; align-items: center; gap: 8px; 
+                         color: #64ffda; font-weight: 500; }
+        .pulse { width: 8px; height: 8px; background: #64ffda; border-radius: 50%; 
+                 animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .controls { text-align: center; margin-bottom: 20px; }
+        .btn { background: #64ffda; color: #1a1a2e; border: none; padding: 10px 20px; 
+               border-radius: 6px; cursor: pointer; font-weight: 600; margin: 0 5px; }
+        .btn:hover { background: #4fd1c5; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📊 Live Voting Results</h1>
+        <h1>Live Voting Results</h1>
         <p class="subtitle">Real-time vote distribution</p>
         
         <div class="controls">
@@ -128,74 +58,96 @@
 
     <script>
         // ============================================
-        // CONFIGURATION
+        // CONFIGURATION - UPDATE THESE 3 VALUES
         // ============================================
-        let PUSHER_KEY = 'b3376f4c3b42063fadcf';
-        let PUSHER_CLUSTER = 'ap2';
+        const PUSHER_KEY = 'b3376f4c3b42063fadcf';        // ← REPLACE
+        const PUSHER_CLUSTER = 'ap2';    // ← REPLACE
+        const API_BASE_URL = 'http://localhost:5000';  // ← REPLACE IF NEEDED
         
-        let pusher, channel, voteChart;
+        // ============================================
+        const getApiUrl = (ep) => API_BASE_URL ? `${API_BASE_URL}${ep}` : ep;
         
-        async function loadConfig() {
-            try {
-                const response = await axios.get('/api/config');
-                PUSHER_KEY = response.data.key;
-                PUSHER_CLUSTER = response.data.cluster;
-            } catch (e) {
-                console.log('Using fallback config');
-            }
+        let pusher, channel, chart;
+        
+        function initChart(data) {
+            const ctx = document.getElementById('voteChart').getContext('2d');
+            const colors = ['rgba(255,99,132,0.8)', 'rgba(54,162,235,0.8)', 
+                           'rgba(255,206,86,0.8)', 'rgba(75,192,192,0.8)', 
+                           'rgba(153,102,255,0.8)'];
+            
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.name),
+                    datasets: [{
+                        label: 'Votes',
+                        data: data.map(d => d.votes),
+                        backgroundColor: colors.slice(0, data.length),
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { color: '#8892b0', stepSize: 1 },
+                             grid: { color: 'rgba(255,255,255,0.1)' } },
+                        x: { ticks: { color: '#fff', font: { size: 14, weight: 'bold' } },
+                             grid: { display: false } }
+                    }
+                }
+            });
+            updateStats(data);
         }
         
-        function initPusher() {
-            pusher = new Pusher(PUSHER_KEY, {
-                cluster: PUSHER_CLUSTER,
-                encrypted: true
-            });
+        function updateChart(data) {
+            if (!chart) return;
+            chart.data.labels = data.map(d => d.name);
+            chart.data.datasets[0].data = data.map(d => d.votes);
+            chart.update('none');
+            updateStats(data);
+        }
+        
+        function updateStats(data) {
+            const total = data.reduce((s, i) => s + i.votes, 0);
+            const leader = data.reduce((m, i) => i.votes > m.votes ? i : m, data[0]);
             
-            channel = pusher.subscribe('poll');
-            
-            channel.bind('vote', function(data) {
-                updateVoteChart(voteChart, data);
-                updateStats(data, 'stats-container');
-            });
+            document.getElementById('stats-container').innerHTML = `
+                <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Total Votes</div></div>
+                <div class="stat-card"><div class="stat-value">${data.length}</div><div class="stat-label">Candidates</div></div>
+                <div class="stat-card"><div class="stat-value">${leader.name}</div><div class="stat-label">Leading (${leader.votes})</div></div>
+                <div class="stat-card"><div class="stat-value">${total>0?(total/data.length).toFixed(1):0}</div><div class="stat-label">Avg</div></div>
+            `;
         }
         
         async function loadData() {
             try {
-                const response = await axios.get('/api/names');
-                if (!voteChart) {
-                    const ctx = document.getElementById('voteChart').getContext('2d');
-                    voteChart = initVoteChart(ctx, response.data);
-                    updateStats(response.data, 'stats-container');
-                } else {
-                    updateVoteChart(voteChart, response.data);
-                    updateStats(response.data, 'stats-container');
-                }
-            } catch (error) {
-                console.error('Failed to load data:', error);
+                const res = await axios.get(getApiUrl('/api/names'));
+                if (!chart) initChart(res.data);
+                else updateChart(res.data);
+            } catch (e) {
+                console.error('Load failed:', e);
+                alert('Failed to load data. Check API_BASE_URL setting.');
             }
         }
         
         async function resetVotes() {
-            if (!confirm('Reset all votes to zero?')) return;
+            if (!confirm('Reset all votes?')) return;
             try {
-                await axios.post('/api/reset');
-            } catch (error) {
-                alert('Reset failed');
-            }
+                await axios.post(getApiUrl('/api/reset'));
+            } catch (e) { alert('Reset failed'); }
         }
         
-        async function refreshData() {
-            await loadData();
+        async function refreshData() { await loadData(); }
+        
+        function init() {
+            pusher = new Pusher(PUSHER_KEY, { cluster: PUSHER_CLUSTER, encrypted: true });
+            channel = pusher.subscribe('poll');
+            channel.bind('vote', data => updateChart(data));
+            loadData();
         }
         
-        // Initialize
-        async function init() {
-            await loadConfig();
-            initPusher();
-            await loadData();
-        }
-        
-        init();
+        document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 </html>
