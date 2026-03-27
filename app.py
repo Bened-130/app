@@ -11,11 +11,10 @@ from dbsetup import get_db, init_db, get_all_votes
 # PUSHER CONFIGURATION - REPLACE THESE VALUES
 # ============================================
 # Get your credentials from: https://dashboard.pusher.com
-PUSHER_APP_ID = 'YOUR_APP_ID'      # Replace with your Pusher App ID
-PUSHER_KEY = 'YOUR_APP_KEY'        # Replace with your Pusher Key
-PUSHER_SECRET = 'YOUR_APP_SECRET'  # Replace with your Pusher Secret
-PUSHER_CLUSTER = 'YOUR_CLUSTER'    # Replace with your Cluster (e.g., 'eu', 'us2')
-
+PUSHER_APP_ID = '2133420'      
+PUSHER_KEY = 'b3376f4c3b42063fadcf'        
+PUSHER_SECRET = '318b47f2e59afdf7fc8e'  
+PUSHER_CLUSTER = 'ap2'    
 # Initialize Pusher client
 pusher_client = Pusher(
     app_id=PUSHER_APP_ID,
@@ -146,7 +145,7 @@ if __name__ == '__main__':
     init_db(DEFAULT_CANDIDATES)
     print(f"\nCandidates: {DEFAULT_CANDIDATES}")
     print(f"\nStarting server...")
-    print(f"Voter page: http://localhost:5000/")
-    print(f"Admin page: http://localhost:5000/admin")
+    print(f"Voter page: http://localhost:5500/")
+    print(f"Admin page: http://localhost:5500/admin")
     # Run with threading enabled for Pusher
-    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+    app.run(debug=True, host='0.0.0.0', port=5500, threaded=True)
