@@ -16,7 +16,7 @@
         <p class="subtitle">Click a button to vote. Results update live for everyone!</p>
         
         <div id="voting-list" class="voting-list">
-            <!-- Vote items injected here -->
+            <div class="loading">Loading candidates...</div>
         </div>
         
         <div class="status">
@@ -26,114 +26,205 @@
 
     <script>
         // ============================================
-        // CONFIGURATION - AUTO-LOADED FROM SERVER
+        // CONFIGURATION - REPLACE WITH YOUR PUSHER CREDENTIALS
         // ============================================
-        let PUSHER_KEY = 'b3376f4c3b42063fadcf';
-        let PUSHER_CLUSTER = 'ap2';
+        // Option 1: Hardcoded (simple but less secure)
+        const PUSHER_KEY = 'b3376f4c3b42063fadcf';        
+        const PUSHER_CLUSTER = 'ap2;   
         
-        // Fetch config from server (optional, falls back to hardcoded)
-        async function loadConfig() {
-            try {
-                const response = await axios.get('/api/config');
-                PUSHER_KEY = response.data.key;
-                PUSHER_CLUSTER = response.data.cluster;
-            } catch (e) {
-                console.log('Using fallback config');
-            }
-        }
+        // Global variables
+        let pusher = null;
+        let channel = null;
+        let voteData = [];
+        let isConnected = false;
         
-        // Initialize Pusher
-        let pusher, channel;
+        // ============================================
+        // INITIALIZATION
+        // ============================================
         
+        // Initialize Pusher with error handling
         function initPusher() {
-            pusher = new Pusher(PUSHER_KEY, {
-                cluster: PUSHER_CLUSTER,
-                encrypted: true
-            });
-            
-            channel = pusher.subscribe('poll');
-            
-            // Listen for real-time updates
-            channel.bind('vote', function(data) {
-                renderVotingList(data);
-                updateConnectionStatus('live');
-            });
-            
-            // Connection status handlers
-            pusher.connection.bind('connected', () => {
-                updateConnectionStatus('connected');
-            });
-            
-            pusher.connection.bind('disconnected', () => {
-                updateConnectionStatus('disconnected');
-            });
-        }
-        
-        // Track total votes for percentage calculation
-        let totalVotes = 0;
-        
-        // Fetch initial data and render
-        async function loadInitialData() {
             try {
-                const response = await axios.get('/api/names');
-                renderVotingList(response.data);
-                updateConnectionStatus('connected');
-            } catch (error) {
-                console.error('Failed to load initial data:', error);
+                console.log('Initializing Pusher with key:', PUSHER_KEY, 'cluster:', PUSHER_CLUSTER);
+                
+                pusher = new Pusher(PUSHER_KEY, {
+                    cluster: PUSHER_CLUSTER,
+                    encrypted: true,
+                    timeout: 5000
+                });
+                
+                channel = pusher.subscribe('poll');
+                
+                // Connection events
+                pusher.connection.bind('connected', () => {
+                    console.log('✅ Pusher connected');
+                    isConnected = true;
+                    updateConnectionStatus('connected');
+                });
+                
+                pusher.connection.bind('disconnected', () => {
+                    console.log('❌ Pusher disconnected');
+                    isConnected = false;
+                    updateConnectionStatus('disconnected');
+                });
+                
+                pusher.connection.bind('error', (err) => {
+                    console.error('Pusher error:', err);
+                    updateConnectionStatus('error');
+                });
+                
+                // Listen for vote events - THIS IS THE KEY FIX
+                channel.bind('vote', function(data) {
+                    console.log('📥 Received vote event:', data);
+                    voteData = data;
+                    renderVotingList(data);
+                    updateConnectionStatus('live');
+                });
+                
+                // Subscribe success
+                channel.bind('pusher:subscription_succeeded', () => {
+                    console.log('✅ Subscribed to poll channel');
+                });
+                
+                channel.bind('pusher:subscription_error', (status) => {
+                    console.error('❌ Subscription failed:', status);
+                });
+                
+            } catch (e) {
+                console.error('Failed to initialize Pusher:', e);
                 updateConnectionStatus('error');
             }
         }
         
+        // ============================================
+        // DATA LOADING
+        // ============================================
+        
+        // Load initial data from REST API
+        async function loadInitialData() {
+            try {
+                console.log('Loading initial data...');
+                const response = await axios.get('/api/names');
+                console.log('Initial data loaded:', response.data);
+                
+                voteData = response.data;
+                renderVotingList(voteData);
+                
+                if (!isConnected) {
+                    updateConnectionStatus('connected');
+                }
+            } catch (error) {
+                console.error('Failed to load initial data:', error);
+                document.getElementById('voting-list').innerHTML = 
+                    '<div class="error">Failed to load candidates. Please refresh.</div>';
+                updateConnectionStatus('error');
+            }
+        }
+        
+        // ============================================
+        // RENDERING
+        // ============================================
+        
         // Render the voting list with live bars
         function renderVotingList(votes) {
             const container = document.getElementById('voting-list');
+            
+            if (!votes || votes.length === 0) {
+                container.innerHTML = '<div class="error">No candidates available</div>';
+                return;
+            }
+            
             container.innerHTML = '';
             
-            // Calculate total for percentage bars
-            totalVotes = votes.reduce((sum, item) => sum + item.votes, 0);
-            const maxVotes = Math.max(...votes.map(v => v.votes), 1);
+            // Calculate totals
+            const totalVotes = votes.reduce((sum, item) => sum + (item.votes || 0), 0);
+            const maxVotes = Math.max(...votes.map(v => v.votes || 0), 1);
             
             votes.forEach(item => {
-                const percentage = totalVotes > 0 ? (item.votes / totalVotes * 100).toFixed(1) : 0;
-                const barWidth = maxVotes > 0 ? (item.votes / maxVotes * 100) : 0;
+                const votes_count = item.votes || 0;
+                const percentage = totalVotes > 0 ? ((votes_count / totalVotes) * 100).toFixed(1) : 0;
+                const barWidth = maxVotes > 0 ? ((votes_count / maxVotes) * 100) : 0;
                 
                 const voteItem = document.createElement('div');
                 voteItem.className = 'vote-item';
                 voteItem.innerHTML = `
                     <div class="vote-info">
                         <span class="name">${escapeHtml(item.name)}</span>
-                        <span class="count">${item.votes} votes (${percentage}%)</span>
+                        <span class="count" id="count-${escapeHtml(item.name)}">${votes_count} votes (${percentage}%)</span>
                     </div>
                     <div class="bar-container">
-                        <div class="bar" style="width: ${barWidth}%"></div>
+                        <div class="bar" id="bar-${escapeHtml(item.name)}" style="width: ${barWidth}%"></div>
                     </div>
-                    <button class="vote-btn" onclick="submitVote('${escapeHtml(item.name)}')">
-                        Vote
+                    <button class="vote-btn" data-name="${escapeHtml(item.name)}">
+                        Vote for ${escapeHtml(item.name)}
                     </button>
                 `;
                 container.appendChild(voteItem);
             });
+            
+            // Attach event listeners to buttons (CRITICAL FIX)
+            document.querySelectorAll('.vote-btn').forEach(btn => {
+                btn.addEventListener('click', handleVoteClick);
+            });
         }
         
-        // Submit vote
-        async function submitVote(name) {
+        // ============================================
+        // VOTING
+        // ============================================
+        
+        // Handle vote button click (FIXED EVENT HANDLER)
+        async function handleVoteClick(event) {
             const btn = event.target;
+            const name = btn.getAttribute('data-name');
+            
+            if (!name) {
+                console.error('No candidate name found on button');
+                return;
+            }
+            
+            // Prevent double-clicking
+            if (btn.disabled) return;
+            
+            console.log('Voting for:', name);
             btn.disabled = true;
             btn.textContent = 'Voting...';
             
             try {
-                await axios.post('/vote', { name: name });
-                btn.textContent = 'Voted!';
+                const response = await axios.post('/vote', { name: name });
+                console.log('Vote response:', response.data);
+                
+                btn.textContent = '✓ Voted!';
+                btn.style.background = '#48bb78';
+                
+                // The real-time update will come via Pusher, but update locally too for instant feedback
+                if (response.data && response.data.data) {
+                    renderVotingList(response.data.data);
+                }
+                
+                // Reset button after delay
                 setTimeout(() => {
-                    btn.textContent = 'Vote';
+                    btn.textContent = `Vote for ${name}`;
+                    btn.style.background = '';
                     btn.disabled = false;
-                }, 1000);
+                }, 2000);
+                
             } catch (error) {
                 console.error('Vote failed:', error);
-                btn.textContent = 'Failed - Retry';
+                btn.textContent = 'Failed - Try Again';
+                btn.style.background = '#f56565';
                 btn.disabled = false;
+                
+                // Show error details
+                if (error.response) {
+                    console.error('Error response:', error.response.data);
+                    alert(`Vote failed: ${error.response.data.error || 'Unknown error'}`);
+                }
             }
         }
+        
+        // ============================================
+        // UTILITIES
+        // ============================================
         
         function updateConnectionStatus(status) {
             const indicator = document.getElementById('connection-status');
@@ -141,29 +232,31 @@
             
             const labels = {
                 'connecting': 'Connecting...',
-                'connected': 'Connected',
-                'live': '● Live Updates',
-                'disconnected': 'Disconnected',
-                'error': 'Error'
+                'connected': 'Connected (Polling)',
+                'live': '● Live Updates Active',
+                'disconnected': 'Disconnected - Retrying...',
+                'error': 'Connection Error'
             };
             indicator.textContent = labels[status] || status;
         }
         
-        // Utility: Escape HTML to prevent XSS
         function escapeHtml(text) {
+            if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
         
-        // Initialize
-        async function init() {
-            await loadConfig();
-            initPusher();
-            await loadInitialData();
-        }
+        // ============================================
+        // STARTUP
+        // ============================================
         
-        init();
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Page loaded, initializing...');
+            initPusher();
+            loadInitialData();
+        });
     </script>
 </body>
 </html>
