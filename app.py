@@ -149,3 +149,10 @@ if __name__ == '__main__':
     print(f"Admin page: http://localhost:5500/admin")
     # Run with threading enabled for Pusher
     app.run(debug=True, host='0.0.0.0', port=5500, threaded=True)
+
+    @app.route('/api/config', methods=['GET'])
+def get_config():
+    return jsonify({
+        'key': PUSHER_KEY,
+        'cluster': PUSHER_CLUSTER
+    })
