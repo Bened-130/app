@@ -8,10 +8,10 @@ Enhanced Automated Voting Bot
 
 Usage:
     # Single URL mode
-    python vote_bot.py --candidate "Alice" --url http://localhost:5500 --votes 5000 --duration 3600
+    python vote_bot.py --candidate "Alice" --url http://localhost:5000 --votes 5000 --duration 3600
     
     # Multi-URL rotation mode (recommended)
-    python vote_bot.py --candidate "Bob" --urls urls.txt --votes 5500 --duration 3600
+    python vote_bot.py --candidate "Bob" --urls urls.txt --votes 5000 --duration 3600
     
     # Inline multiple URLs
     python vote_bot.py --candidate "Charlie" --url http://server1.com --url http://server2.com --url http://server3.com --votes 5000 --duration 3600
@@ -320,7 +320,7 @@ def main():
 EXAMPLES:
 
   # Vote for "Alice" via single URL
-  python vote_bot.py --candidate "Alice" --url http://localhost:5500
+  python vote_bot.py --candidate "Alice" --url http://localhost:5000
 
   # Vote for "Bob" through multiple URLs (random rotation)
   python vote_bot.py --candidate "Bob" --url http://server1.com --url http://server2.com --url http://server3.com
@@ -332,7 +332,7 @@ EXAMPLES:
   python vote_bot.py --candidate "Diana" --urls production_urls.txt --votes 5000 --duration 3600
 
   # Quick test: 100 votes in 30 seconds via multiple URLs
-  python vote_bot.py --candidate "Test" --url http://localhost:5500 --url http://127.0.0.1:5500 --votes 100 --duration 30
+  python vote_bot.py --candidate "Test" --url http://localhost:5000 --url http://127.0.0.1:5500 --votes 100 --duration 30
 
 URL FILE FORMAT (urls.txt):
   http://server1.example.com
