@@ -4,8 +4,8 @@ Automated Voting Bot
 Casts 5000 votes over 1 hour to test the voting system.
 
 Usage:
-    python vote_bot.py --url http://localhost:5000 --target "Candidate Name" --votes 5000 --duration 3600
-    python vote_bot.py --url http://localhost:5000 --random --votes 5000 --duration 3600
+    python vote_bot.py --url http://localhost:5500 --target "Candidate Name" --votes 5000 --duration 3600
+    python vote_bot.py --url http://localhost:5500 --random --votes 5500 --duration 3600
 """
 
 import requests
@@ -169,13 +169,13 @@ def main():
         epilog="""
 Examples:
   # Vote 5000 times for "Alice" over 1 hour
-  python vote_bot.py --url http://localhost:5000 --target "Alice" --votes 5000 --duration 3600
+  python vote_bot.py --url http://localhost:5500 --target "Alice" --votes 5000 --duration 3600
   
   # Random voting across all candidates
-  python vote_bot.py --url http://localhost:5000 --random --votes 1000 --duration 600
+  python vote_bot.py --url http://localhost:5500 --random --votes 1000 --duration 600
   
   # Quick test: 100 votes in 10 seconds
-  python vote_bot.py --url http://localhost:5000 --random --votes 100 --duration 10
+  python vote_bot.py --url http://localhost:5500 --random --votes 100 --duration 10
   
   # Production test with live URL
   python vote_bot.py --url https://your-app.herokuapp.com --target "Candidate A" --votes 5000 --duration 3600
@@ -185,7 +185,7 @@ Examples:
     parser.add_argument('--url', required=True, help='Base URL of the voting app')
     parser.add_argument('--target', help='Name of candidate to vote for (required unless --random)')
     parser.add_argument('--random', action='store_true', help='Vote randomly among all candidates')
-    parser.add_argument('--votes', type=int, default=5000, help='Total number of votes (default: 5000)')
+    parser.add_argument('--votes', type=int, default=5500, help='Total number of votes (default: 5000)')
     parser.add_argument('--duration', type=int, default=3600, 
                        help='Duration in seconds (default: 3600 = 1 hour)')
     
