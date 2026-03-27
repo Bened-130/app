@@ -10,10 +10,9 @@
     <!-- Axios -->
     <script src="https://cdn.jsdelivr.net/npm/axios@1.6.2/dist/axios.min.js"></script>
     <style>
-        /* Emergency inline styles in case CSS fails to load */
         .error-box { background: #fee; color: #c33; padding: 15px; border-radius: 8px; margin: 10px 0; }
         .success-box { background: #efe; color: #3c3; padding: 15px; border-radius: 8px; margin: 10px 0; }
-        .debug-info { background: #f0f0f0; padding: 10px; font-family: monospace; font-size: 12px; margin-top: 20px; text-align: left; }
+        .debug-info { background: #f0f0f0; padding: 10px; font-family: monospace; font-size: 11px; margin-top: 20px; text-align: left; max-height: 200px; overflow-y: auto; }
     </style>
 </head>
 <body>
@@ -29,95 +28,65 @@
             <span id="connection-status" class="status-indicator connecting">Initializing...</span>
         </div>
         
-        <!-- Debug panel - remove in production -->
-        <div id="debug-panel" class="debug-info" style="display:none;">
-            <strong>Debug Info:</strong>
+        <div id="debug-panel" class="debug-info">
+            <strong>Debug Log:</strong>
             <div id="debug-content"></div>
         </div>
     </div>
 
     <script>
         // ============================================
-        // STEP 1: UPDATE THESE WITH YOUR PUSHER CREDENTIALS
-        // Get these from: https://dashboard.pusher.com/apps/2133420/b33704c3b42063fadcf/keys
+        // CONFIGURATION - UPDATE THESE 3 VALUES
         // ============================================
-        const PUSHER_KEY = 'b3376f4c3b42063fadcf';        
-        const PUSHER_CLUSTER = 'ap2';    
+        
+        // 1. PUSHER KEY: From https://dashboard.pusher.com/apps/[YOUR_APP_ID]/keys
+        const PUSHER_KEY = 'b3376f4c3b42063fadcf';        // ← REPLACE (e.g., 'a1b2c3d4e5f6...')
+        
+        // 2. PUSHER CLUSTER: Same page as above (eu, us2, mt1, ap1, etc.)
+        const PUSHER_CLUSTER = 'ap2';    // ← REPLACE (e.g., 'eu')
+        
+        // 3. API BASE URL: Your Flask server address
+        // If using Live Server (port 5500): 'http://localhost:5000'
+        // If accessing Flask directly: '' (empty for same origin)
+        const API_BASE_URL = 'http://localhost:5000';  // ← REPLACE IF NEEDED
         
         // ============================================
-        // STEP 2: UPDATE THIS WITH YOUR FLASK SERVER URL
+        // CODE - NO CHANGES NEEDED BELOW
         // ============================================
-        // If running locally: 'http://localhost:5000' or 'http://127.0.0.1:5000'
-        // If deployed: 'https://your-app.herokuapp.com' or your domain
-        const API_BASE_URL = '';  // ← LEAVE EMPTY to use same origin, or set explicitly like 'http://localhost:5000'
         
-        // Build full API URL
-        const getApiUrl = (endpoint) => {
-            if (API_BASE_URL) {
-                return `${API_BASE_URL}${endpoint}`;
-            }
-            // Same origin - works if HTML is served by Flask
-            return endpoint;
-        };
+        const getApiUrl = (endpoint) => API_BASE_URL ? `${API_BASE_URL}${endpoint}` : endpoint;
         
-        // Global state
         let pusher = null;
         let channel = null;
         let candidates = [];
-        let isPusherConnected = false;
-        let isDataLoaded = false;
         
-        // Debug logging
         function debug(msg) {
             console.log(msg);
-            const debugDiv = document.getElementById('debug-content');
-            if (debugDiv) {
-                debugDiv.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
-            }
+            const div = document.getElementById('debug-content');
+            if (div) div.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
         }
         
-        // ============================================
-        // INITIALIZE PUSHER
-        // ============================================
         function initPusher() {
-            debug('Initializing Pusher...');
-            
             if (PUSHER_KEY === 'YOUR_APP_KEY') {
-                showError('⚠️ Configuration Error: Please update PUSHER_KEY in the HTML file');
+                showError('Update PUSHER_KEY in HTML file (line 48)');
                 return false;
             }
             
             try {
-                pusher = new Pusher(PUSHER_KEY, {
-                    cluster: PUSHER_CLUSTER,
-                    encrypted: true,
-                    forceTLS: true,
-                    timeout: 5000
-                });
-                
+                pusher = new Pusher(PUSHER_KEY, { cluster: PUSHER_CLUSTER, encrypted: true });
                 channel = pusher.subscribe('poll');
                 
-                // Connection events
                 pusher.connection.bind('connected', () => {
-                    debug('✅ Pusher connected');
-                    isPusherConnected = true;
+                    debug('Pusher connected');
                     updateStatus('connected', 'Connected to realtime');
                 });
                 
-                pusher.connection.bind('disconnected', () => {
-                    debug('❌ Pusher disconnected');
-                    isPusherConnected = false;
-                    updateStatus('disconnected', 'Disconnected');
-                });
-                
                 pusher.connection.bind('error', (err) => {
-                    debug('Pusher error: ' + JSON.stringify(err));
-                    updateStatus('error', 'Connection error');
+                    debug(' Pusher error: ' + JSON.stringify(err));
                 });
                 
-                // CRITICAL: Listen for vote events
                 channel.bind('vote', function(data) {
-                    debug('📥 Received vote event with ' + (data ? data.length : 0) + ' candidates');
+                    debug(' Received live update');
                     if (data && Array.isArray(data)) {
                         candidates = data;
                         renderVotingList(data);
@@ -125,97 +94,73 @@
                     }
                 });
                 
-                // Subscription events
-                channel.bind('pusher:subscription_succeeded', () => {
-                    debug('✅ Subscribed to channel');
-                });
-                
-                channel.bind('pusher:subscription_error', (status) => {
-                    debug('❌ Subscription error: ' + status);
-                });
+                channel.bind('pusher:subscription_succeeded', () => debug('✅ Subscribed to channel'));
                 
                 return true;
             } catch (e) {
-                debug('❌ Pusher init failed: ' + e.message);
+                debug('Pusher init failed: ' + e.message);
                 return false;
             }
         }
         
-        // ============================================
-        // LOAD CANDIDATES FROM API
-        // ============================================
         async function loadCandidates() {
-            debug('Loading candidates from API...');
             updateStatus('connecting', 'Loading candidates...');
             
             try {
                 const url = getApiUrl('/api/names');
-                debug('Fetching from: ' + url);
+                debug('Fetching: ' + url);
                 
                 const response = await axios.get(url, { timeout: 10000 });
-                debug('API response: ' + JSON.stringify(response.data));
+                debug('Loaded ' + response.data.length + ' candidates');
                 
-                if (response.data && Array.isArray(response.data)) {
-                    candidates = response.data;
-                    isDataLoaded = true;
-                    renderVotingList(candidates);
-                    updateStatus('connected', 'Ready - click to vote');
-                    return true;
-                } else {
-                    throw new Error('Invalid data format from API');
-                }
+                candidates = response.data;
+                renderVotingList(candidates);
+                updateStatus('ready', 'Click to vote');
+                return true;
             } catch (error) {
-                debug('❌ API Error: ' + error.message);
-                if (error.response) {
-                    debug('Status: ' + error.response.status);
-                }
-                
-                // Show detailed error
-                let errorMsg = 'Failed to load candidates. ';
-                if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
-                    errorMsg += '<br><strong>Is the Flask server running on port 5000?</strong><br>';
-                    errorMsg += 'Run: <code>python app.py</code>';
-                } else if (error.response && error.response.status === 404) {
-                    errorMsg += 'API endpoint not found. Check server configuration.';
+                let msg = 'Failed to load candidates. ';
+                if (error.response && error.response.status === 404) {
+                    msg += '<br><strong>API not found. Check API_BASE_URL setting.</strong><br>';
+                    msg += 'Current: <code>' + getApiUrl('/api/names') + '</code><br>';
+                    msg += 'Is Flask running on port 5000?';
+                } else if (error.code === 'ECONNREFUSED' || error.message.includes('Network')) {
+                    msg += '<br><strong>Cannot connect to server.</strong><br>';
+                    msg += 'Run: <code>python app.py</code>';
                 } else {
-                    errorMsg += error.message;
+                    msg += error.message;
                 }
                 
-                showError(errorMsg);
+                debug('API Error: ' + error.message);
+                showError(msg);
                 updateStatus('error', 'Load failed');
                 return false;
             }
         }
         
-        // ============================================
-        // RENDER VOTING LIST
-        // ============================================
         function renderVotingList(votes) {
             const container = document.getElementById('voting-list');
-            
             if (!votes || votes.length === 0) {
-                container.innerHTML = '<div class="error-box">No candidates available</div>';
+                container.innerHTML = '<div class="error-box">No candidates found</div>';
                 return;
             }
             
-            // Calculate statistics
             const totalVotes = votes.reduce((sum, item) => sum + (item.votes || 0), 0);
             const maxVotes = Math.max(...votes.map(v => v.votes || 0), 1);
             
             let html = '';
             votes.forEach(item => {
-                const voteCount = item.votes || 0;
-                const percentage = totalVotes > 0 ? ((voteCount / totalVotes) * 100).toFixed(1) : 0;
-                const barWidth = maxVotes > 0 ? ((voteCount / maxVotes) * 100) : 0;
+                const count = item.votes || 0;
+                const pct = totalVotes > 0 ? ((count / totalVotes) * 100).toFixed(1) : 0;
+                const bar = maxVotes > 0 ? ((count / maxVotes) * 100) : 0;
                 
                 html += `
-                    <div class="vote-item" data-name="${escapeHtml(item.name)}">
+                    <div class="vote-item">
                         <div class="vote-info">
                             <span class="name">${escapeHtml(item.name)}</span>
-                            <span class="count">${voteCount} votes (${percentage}%)</span>
+                            <span class="count">${count} votes (${pct}%)</span>
                         </div>
                         <div class="bar-container">
-                            <div class="bar" style="width: ${barWidth}%"></div>
+                            <div class="bar" style="width: ${bar}%"></div>
                         </div>
                         <button class="vote-btn" onclick="submitVote('${escapeHtml(item.name)}', this)">
                             Vote for ${escapeHtml(item.name)}
@@ -225,99 +170,63 @@
             });
             
             container.innerHTML = html;
-            debug('Rendered ' + votes.length + ' candidates');
         }
         
-        // ============================================
-        // SUBMIT VOTE
-        // ============================================
-        async function submitVote(candidateName, btnElement) {
-            debug('Submitting vote for: ' + candidateName);
-            
-            // Disable button immediately
-            btnElement.disabled = true;
-            btnElement.textContent = 'Voting...';
+        async function submitVote(name, btn) {
+            btn.disabled = true;
+            btn.textContent = 'Voting...';
             
             try {
                 const url = getApiUrl('/vote');
-                debug('Posting to: ' + url);
+                debug('Voting for: ' + name);
                 
-                const response = await axios.post(url, {
-                    name: candidateName
-                }, {
+                const response = await axios.post(url, { name: name }, {
                     headers: { 'Content-Type': 'application/json' },
                     timeout: 10000
                 });
                 
-                debug('Vote successful: ' + JSON.stringify(response.data));
+                debug('Vote successful');
+                btn.textContent = '✓ Voted!';
+                btn.style.background = '#48bb78';
                 
-                // Show success
-                btnElement.textContent = '✓ Voted!';
-                btnElement.style.background = '#48bb78';
-                
-                // Update display immediately with returned data
                 if (response.data && response.data.data) {
                     renderVotingList(response.data.data);
                 }
                 
-                // Reset button after 2 seconds
                 setTimeout(() => {
-                    btnElement.textContent = 'Vote for ' + candidateName;
-                    btnElement.style.background = '';
-                    btnElement.disabled = false;
+                    btn.textContent = 'Vote for ' + name;
+                    btn.style.background = '';
+                    btn.disabled = false;
                 }, 2000);
                 
             } catch (error) {
-                debug('❌ Vote failed: ' + error.message);
-                
-                btnElement.textContent = 'Failed - Retry';
-                btnElement.style.background = '#f56565';
-                btnElement.disabled = false;
-                
-                // Show error alert
-                let msg = 'Vote failed';
-                if (error.response) {
-                    msg += ': ' + (error.response.data.error || error.response.statusText);
-                }
-                alert(msg);
+                debug('Vote failed: ' + error.message);
+                btn.textContent = 'Failed - Retry';
+                btn.style.background = '#f56565';
+                btn.disabled = false;
+                alert('Vote failed: ' + (error.response?.data?.error || error.message));
             }
         }
         
-        // ============================================
-        // UI HELPERS
-        // ============================================
-        function updateStatus(type, message) {
-            const indicator = document.getElementById('connection-status');
-            indicator.className = 'status-indicator ' + type;
-            indicator.textContent = message;
+        function updateStatus(type, msg) {
+            const el = document.getElementById('connection-status');
+            el.className = 'status-indicator ' + type;
+            el.textContent = msg;
         }
         
-        function showError(message) {
-            const container = document.getElementById('voting-list');
-            container.innerHTML = `<div class="error-box">${message}</div>`;
+        function showError(msg) {
+            document.getElementById('voting-list').innerHTML = `<div class="error-box">${msg}</div>`;
         }
         
         function escapeHtml(text) {
-            if (!text) return '';
             const div = document.createElement('div');
-            div.textContent = text;
+            div.textContent = text || '';
             return div.innerHTML;
         }
         
-        // ============================================
-        // STARTUP
-        // ============================================
-        document.addEventListener('DOMContentLoaded', async () => {
-            // Show debug panel (remove this line in production)
-            document.getElementById('debug-panel').style.display = 'block';
-            
-            debug('Page loaded. API_BASE_URL: ' + (API_BASE_URL || '(same origin)'));
-            
-            // Initialize Pusher first
+        document.addEventListener('DOMContentLoaded', () => {
             initPusher();
-            
-            // Then load data
-            await loadCandidates();
+            loadCandidates();
         });
     </script>
 </body>
