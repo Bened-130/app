@@ -1,0 +1,4 @@
+Flask==3.0.0
+pusher==3.3.2
+simplejson==3.19.2
+requests==2.31.0
